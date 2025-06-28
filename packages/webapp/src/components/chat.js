@@ -9,7 +9,8 @@ export class ChatInterface extends LitElement {
       inputMessage: { type: String },
       isLoading: { type: Boolean },
       isRetrieving: { type: Boolean },
-      ragEnabled: { type: Boolean }
+      ragEnabled: { type: Boolean },
+      chatMode: { type: String } 
     };
   }
  
@@ -20,6 +21,7 @@ export class ChatInterface extends LitElement {
     this.isLoading = false;
     this.isRetrieving = false;
     this.ragEnabled = true; // Enable by default
+    this.chatMode = "basic"; // Set default mode to basic
   }
  
   // Render into light DOM so external CSS applies
@@ -45,16 +47,26 @@ export class ChatInterface extends LitElement {
     <div class="chat-container">
       <div class="chat-header">
         <button class="clear-cache-btn" @click=${this._clearCache}> 🧹Clear Chat</button>
-        <label class="rag-toggle">
-          <input type="checkbox" ?checked=${this.ragEnabled} @change=${this._toggleRag}>
-          Use Employee Handbook
-        </label>
+       <div class="mode-selector">
+  <label>Mode:</label>
+    <select @change=${this._handleModeChange}>
+      <option value="basic" ?selected=${this.chatMode === 'basic'}>Basic AI</option>
+      <option value="agent" ?selected=${this.chatMode === 'agent'}>Agent</option>
+    </select>
+</div>
+    <label class="rag-toggle ${this.chatMode === 'agent' ? 'disabled' : ''}">
+  <input type="checkbox" 
+    ?checked=${this.ragEnabled} 
+    @change=${this._toggleRag}
+    ?disabled=${this.chatMode === 'agent'}>
+Use Employee Handbook
+</label>
       </div>
       <div class="chat-messages">
         ${this.messages.map(message => html`
           <div class="message ${message.role === 'user' ? 'user-message' : 'ai-message'}">
             <div class="message-content">
-              <span class="message-sender">${message.role === 'user' ? 'You' : 'AI'}</span>
+             <span class="message-sender">${message.role === 'user' ? 'You' : (this.chatMode === 'agent' ? 'Agent' : 'AI')}</span>
               <p>${message.content}</p>
               ${this.ragEnabled && message.sources && message.sources.length > 0 ? html`
                 <details class="sources">
@@ -82,13 +94,15 @@ export class ChatInterface extends LitElement {
         ` : ''}
       </div>
       <div class="chat-input">
-        <input
-          type="text"
-          placeholder="Ask about company policies, benefits, etc..."
-          .value=${this.inputMessage}
-          @input=${this._handleInput}
-          @keyup=${this._handleKeyUp}
-        />
+        <input 
+  type="text" 
+  placeholder=${this.chatMode === 'basic' ? 
+    "Ask about company policies, benefits, etc..." : 
+    "Ask Agent"}
+  .value=${this.inputMessage}
+  @input=${this._handleInput}
+  @keyup=${this._handleKeyUp}
+/>
         <button @click=${this._sendMessage} ?disabled=${this.isLoading || !this.inputMessage.trim()}>
           Send
         </button>
@@ -119,6 +133,21 @@ export class ChatInterface extends LitElement {
     }
   }
  
+  _handleModeChange(e) {
+  const newMode = e.target.value;
+  if (newMode !== this.chatMode) {
+    this.chatMode = newMode;
+    
+    // Disable RAG when switching to agent mode
+    if (newMode === 'agent') {
+      this.ragEnabled = false;
+    }
+    
+    clearMessages();
+    this.messages = [];
+  }
+}
+
   // Handle sending a message and receiving a response
   async _sendMessage() {
     if (!this.inputMessage.trim() || this.isLoading) return;
@@ -155,18 +184,18 @@ export class ChatInterface extends LitElement {
     }
   }
  
-  // Simulate an AI response (placeholder for future integration)
-  async _apiCall(message) {
-    const res = await fetch("http://localhost:3001/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message,
-        useRAG: this.ragEnabled
-      }),
-    });
-    const data = await res.json();
-    return data;
-  }
+async _apiCall(message) {
+  const res = await fetch("http://localhost:3001/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      message,
+      useRAG: this.ragEnabled,
+      mode: this.chatMode // Send the selected mode to the server
+    }),
+  });
+  const data = await res.json();
+  return data;
+}
 }
 customElements.define('chat-interface', ChatInterface);
